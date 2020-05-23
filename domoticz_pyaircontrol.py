@@ -31,24 +31,27 @@
     </params>
 </plugin>
 """
+import threading
+
 import Domoticz
 import pyairctrl.airctrl
 
 class PyAirControl:
+    POLLING_DELAY = 10.0 // s
     enabled = False
 
     devices = [
-        ("pwr", "Power", 0, 0),
-        ("pm25", "PM2.5", 0, 0),
-        ("rh", "Relative humidity", 0, 0),
-        ("rhset", "Target humidity", 0, 0),
-        ("iaql", "Allergen index", 0, 0),
-        ("temp", "Temperature", 0, 0),
+        ("pwr", "Power", 244, 62, {"Switchtype": 0}),
+        ("pm25", "PM2.5", , 243, 31, {"Custom": "1;µg/m³"}),
+        ("rh", "Relative humidity", 81, 1),
+        ("rhset", "Target humidity", 81, 1),
+        ("iaql", "Allergen index", 249, 1),
+        ("temp", "Temperature", 80, 5),
         ("mode," "Mode", 0, 0),
         ("om" "Fan speed", 0, 0),
         ("aqil", "Light brightness", 0, 0),
         ("aqit", "Air quality notification threshold", 0, 0),
-        ("uil", "Buttons light", 0, 0),
+        ("uil", "Buttons light", 244, 62, {"Switchtype": 0}),
         ("ddp", "Used index", 0, 0),
         ("wl", "Water level", 0, 0),
         ("cl", "Child lock", 0, 0),
@@ -56,23 +59,46 @@ class PyAirControl:
         ("dtrs", "Timer", 0, 0),
         ("fltt1", "HEPA filter type", 0, 0),
         ("fltt2", "Active carbon filter type", 0, 0),
-        ("fltsts0", "Pre-filter and Wick", 0, 0),
-        ("fltsts1", "HEPA filter", 0, 0),
-        ("fltsts2", "Active carbon filter", 0, 0),
-        ("wicksts", "Wick filter", 0, 0),
-        ("err", "[ERROR] Message", 0, 0),
+        ("fltsts0", "Pre-filter and Wick", 243, 31, {"Custom": "1;Hours"}),
+        ("fltsts1", "HEPA filter", 243, 31, {"Custom": "1;Hours"}),
+        ("fltsts2", "Active carbon filter", 243, 31, {"Custom": "1;Hours"}),
+        ("wicksts", "Wick filter", 243, 31, {"Custom": "1;Hours"}),
+        ("err", "[ERROR] Message", 243, 22),
     ]
 
     def __init__(self):
-        #self.var = 123
-        return
+        self.poll_thread = threading.Thread(target=self.pollDeviceThread)
+        self.poll_thread_stop = threading.Event()
+        self.version = None
+        self.device_address = None
+        self.client: pyairctrl.airtctrl.HTTPAirClientBase
 
     def checkDevices(self):
-        for index, (_, name, type_, subtype) in enumerate(self.devices):
-            if index + 1 not in Devices:
+        for index, (_, name, type_, subtype, options) in enumerate(self.devices):
+            if index + 1 not in Devices and type_ != 0:
                 Domoticz.Debug("Create " + name)
-                Domoticz.Device(Name=name, Unit=index+1, Type=type_, Subtype=subtype).Create()
+                Domoticz.Device(Name=name, Unit=index+1, Type=type_, Subtype=subtype, **options).Create()
 
+    def pollDeviceThread(self):
+        while self.poll_thread_stop.wait(PyAirControl.POLLING_DELAY):
+            if self.poll_thread_stop.is_set():
+                return
+            else:
+                self.onPollDevice()
+
+    def onPollDevice(self):
+        status = self.client.get_status()
+        for index, (_, name, type_, subtype, options) in enumerate(self.devices):
+            if type_ == 0:  # Not yet enabled
+                continue
+            try:
+                value = status[name]
+                if type_ == 244:
+                    Devices[index + 1].Update(nValue=value, sValue={'1': 'on', '0': 'off'}.get(value, 'off'))
+                else:
+                    Devices[index + 1].Update(nValue=1,sValue=str(value))
+            except KeyError:
+                pass
 
     def onStart(self):
         self.version = Parameters["Mode1"]
@@ -86,12 +112,15 @@ class PyAirControl:
         elif self.version == '1.0.7':
             c = pyairctrl.airctrl.Version107Client(self.device_address)
         self.client = c
+        self.poll_thread.start()
 
         Domoticz.Log("onStart called")
 
 
     def onStop(self):
         Domoticz.Log("onStop called")
+        self.poll_thread_stop.set()
+        self.poll_thread.join()
 
     def onConnect(self, Connection, Status, Description):
         Domoticz.Log("onConnect called")
