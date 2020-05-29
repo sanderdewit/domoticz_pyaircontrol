@@ -105,6 +105,7 @@ class PyAirControl:
     def onStart(self):
         self.protocol = Parameters["Mode1"]
         self.device_address = Parameters["Address"].replace(" ", "")
+        self.checkDevices()
 
         if self.protocol == 'http':
             c = pyairctrl.airctrl.HTTPAirClient(self.device_address)
