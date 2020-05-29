@@ -21,11 +21,11 @@
     </description>
     <params>
         <param field="Address" label="Philips air purifier address" width="300px" required="true"/>
-        <param field="Mode1" label="Protocol version" width="300px" required="true">
+        <param field="Mode1" label="Protocol" width="300px" required="true">
             <options>
-                <option label="0.1.0 (HTTP)" value="0.1.0"/>
-                <option label="0.2.1 (CoAP)" value="0.2.1"/>
-                <option label="1.0.7 (Encrypted CoAP)" value="1.0.7"/>
+                <option label="HTTP" value="http"/>
+                <option label="CoAP" value="coap"/>
+                <option label="¨Plain CoAP" value="plain_coap"/>
             </options>
         </param>
     </params>
@@ -34,15 +34,17 @@
 import threading
 
 import Domoticz
+import pyairctrl.coap_client
 import pyairctrl.airctrl
 
+
 class PyAirControl:
-    POLLING_DELAY = 10.0 // s
+    POLLING_DELAY = 10.0  # s
     enabled = False
 
     devices = [
         ("pwr", "Power", 244, 62, {"Switchtype": 0}),
-        ("pm25", "PM2.5", , 243, 31, {"Custom": "1;µg/m³"}),
+        ("pm25", "PM2.5", 243, 31, {"Custom": "1;µg/m³"}),
         ("rh", "Relative humidity", 81, 1),
         ("rhset", "Target humidity", 81, 1),
         ("iaql", "Allergen index", 249, 1),
@@ -69,15 +71,15 @@ class PyAirControl:
     def __init__(self):
         self.poll_thread = threading.Thread(target=self.pollDeviceThread)
         self.poll_thread_stop = threading.Event()
-        self.version = None
+        self.protocol = None
         self.device_address = None
-        self.client: pyairctrl.airtctrl.HTTPAirClientBase
+        self.client: pyairctrl.coap_client.HTTPAirClientBase
 
     def checkDevices(self):
         for index, (_, name, type_, subtype, options) in enumerate(self.devices):
             if index + 1 not in Devices and type_ != 0:
                 Domoticz.Debug("Create " + name)
-                Domoticz.Device(Name=name, Unit=index+1, Type=type_, Subtype=subtype, **options).Create()
+                Domoticz.Device(Name=name, Unit=index + 1, Type=type_, Subtype=subtype, **options).Create()
 
     def pollDeviceThread(self):
         while self.poll_thread_stop.wait(PyAirControl.POLLING_DELAY):
@@ -96,26 +98,27 @@ class PyAirControl:
                 if type_ == 244:
                     Devices[index + 1].Update(nValue=value, sValue={'1': 'on', '0': 'off'}.get(value, 'off'))
                 else:
-                    Devices[index + 1].Update(nValue=1,sValue=str(value))
+                    Devices[index + 1].Update(nValue=1, sValue=str(value))
             except KeyError:
                 pass
 
     def onStart(self):
-        self.version = Parameters["Mode1"]
+        self.protocol = Parameters["Mode1"]
         self.device_address = Parameters["Address"].replace(" ", "")
 
-        if self.version == '0.1.0':
+        if self.protocol == 'http':
             c = pyairctrl.airctrl.HTTPAirClient(self.device_address)
             c.load_key()
-        elif self.version == '0.2.1':
+        elif self.protocol == 'plain_coap':
+            c = pyairctrl.airctrl.PlainCoAPAirClient(self.device_address)
+        elif self.protocol == 'coap':
             c = pyairctrl.airctrl.CoAPAirClient(self.device_address)
-        elif self.version == '1.0.7':
-            c = pyairctrl.airctrl.Version107Client(self.device_address)
+        else:
+            raise NotImplementedError(f"Unknown protocol {self.protocol}")
         self.client = c
         self.poll_thread.start()
 
         Domoticz.Log("onStart called")
-
 
     def onStop(self):
         Domoticz.Log("onStop called")
@@ -129,10 +132,13 @@ class PyAirControl:
         Domoticz.Log("onMessage called")
 
     def onCommand(self, Unit, Command, Level, Hue):
-        Domoticz.Log("onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
+        Domoticz.Log(
+            "onCommand called for Unit " + str(Unit) + ": Parameter '" + str(Command) + "', Level: " + str(Level))
+        self.client.set_values({Command: Level})
 
     def onNotification(self, Name, Subject, Text, Status, Priority, Sound, ImageFile):
-        Domoticz.Log("Notification: " + Name + "," + Subject + "," + Text + "," + Status + "," + str(Priority) + "," + Sound + "," + ImageFile)
+        Domoticz.Log("Notification: " + Name + "," + Subject + "," + Text + "," + Status + "," + str(
+            Priority) + "," + Sound + "," + ImageFile)
 
     def onDisconnect(self, Connection):
         Domoticz.Log("onDisconnect called")
@@ -140,46 +146,56 @@ class PyAirControl:
     def onHeartbeat(self):
         Domoticz.Log("onHeartbeat called")
 
+
 global _plugin
 _plugin = PyAirControl()
+
 
 def onStart():
     global _plugin
     _plugin.onStart()
 
+
 def onStop():
     global _plugin
     _plugin.onStop()
+
 
 def onConnect(Connection, Status, Description):
     global _plugin
     _plugin.onConnect(Connection, Status, Description)
 
+
 def onMessage(Connection, Data):
     global _plugin
     _plugin.onMessage(Connection, Data)
+
 
 def onCommand(Unit, Command, Level, Hue):
     global _plugin
     _plugin.onCommand(Unit, Command, Level, Hue)
 
+
 def onNotification(Name, Subject, Text, Status, Priority, Sound, ImageFile):
     global _plugin
     _plugin.onNotification(Name, Subject, Text, Status, Priority, Sound, ImageFile)
+
 
 def onDisconnect(Connection):
     global _plugin
     _plugin.onDisconnect(Connection)
 
+
 def onHeartbeat():
     global _plugin
     _plugin.onHeartbeat()
+
 
 # Generic helper functions
 def DumpConfigToLog():
     for x in Parameters:
         if Parameters[x] != "":
-            Domoticz.Debug( "'" + x + "':'" + str(Parameters[x]) + "'")
+            Domoticz.Debug("'" + x + "':'" + str(Parameters[x]) + "'")
     Domoticz.Debug("Device count: " + str(len(Devices)))
     for x in Devices:
         Domoticz.Debug("Device:           " + str(x) + " - " + str(Devices[x]))
