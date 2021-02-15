@@ -45,32 +45,30 @@ class PyAirControl:
     devices = [
         ("pwr", "Power", 244, 62, {"Switchtype": 0}),
         ("pm25", "PM2.5", 243, 31, {"Custom": "1;µg/m³"}),
-        ("rh", "Relative humidity", 81, 1),
-        ("rhset", "Target humidity", 81, 1),
-        ("iaql", "Allergen index", 249, 1),
-        ("temp", "Temperature", 80, 5),
-        ("mode," "Mode", 0, 0),
-        ("om" "Fan speed", 0, 0),
-        ("aqil", "Light brightness", 0, 0),
-        ("aqit", "Air quality notification threshold", 0, 0),
+        ("rh", "Relative humidity", 81, 1, {}),
+        ("rhset", "Target humidity", 81, 1, {}),
+        ("iaql", "Allergen index", 249, 1, {}),
+        ("temp", "Temperature", 80, 5, {}),
+        ("mode", "Mode", 0, 0, {}),
+        ("om", "Fan speed", 0, 0, {}),
+        ("aqil", "Light brightness", 0, 0, {}),
+        ("aqit", "Air quality notification threshold", 0, 0, {}),
         ("uil", "Buttons light", 244, 62, {"Switchtype": 0}),
-        ("ddp", "Used index", 0, 0),
-        ("wl", "Water level", 0, 0),
-        ("cl", "Child lock", 0, 0),
-        ("dt", "Timer", 0, 0),
-        ("dtrs", "Timer", 0, 0),
-        ("fltt1", "HEPA filter type", 0, 0),
-        ("fltt2", "Active carbon filter type", 0, 0),
+        ("ddp", "Used index", 0, 0, {}),
+        ("wl", "Water level", 0, 0, {}),
+        ("cl", "Child lock", 0, 0, {}),
+        ("dt", "Timer", 0, 0, {}),
+        ("dtrs", "Timer", 0, 0, {}),
+        ("fltt1", "HEPA filter type", 0, 0, {}),
+        ("fltt2", "Active carbon filter type", 0, 0, {}),
         ("fltsts0", "Pre-filter and Wick", 243, 31, {"Custom": "1;Hours"}),
         ("fltsts1", "HEPA filter", 243, 31, {"Custom": "1;Hours"}),
         ("fltsts2", "Active carbon filter", 243, 31, {"Custom": "1;Hours"}),
         ("wicksts", "Wick filter", 243, 31, {"Custom": "1;Hours"}),
-        ("err", "[ERROR] Message", 243, 22),
+        ("err", "[ERROR] Message", 243, 22, {}),
     ]
 
     def __init__(self):
-        self.poll_thread = threading.Thread(target=self.pollDeviceThread)
-        self.poll_thread_stop = threading.Event()
         self.protocol = None
         self.device_address = None
         self.client: pyairctrl.coap_client.HTTPAirClientBase
@@ -78,15 +76,8 @@ class PyAirControl:
     def checkDevices(self):
         for index, (_, name, type_, subtype, options) in enumerate(self.devices):
             if index + 1 not in Devices and type_ != 0:
-                Domoticz.Debug("Create " + name)
-                Domoticz.Device(Name=name, Unit=index + 1, Type=type_, Subtype=subtype, **options).Create()
-
-    def pollDeviceThread(self):
-        while self.poll_thread_stop.wait(PyAirControl.POLLING_DELAY):
-            if self.poll_thread_stop.is_set():
-                return
-            else:
-                self.onPollDevice()
+                Domoticz.Log("Create " + name)
+                Domoticz.Device(Name=name, Unit=index + 1, Type=type_, Subtype=subtype, Options=options).Create()
 
     def onPollDevice(self):
         status = self.client.get_status()
@@ -117,7 +108,6 @@ class PyAirControl:
         else:
             raise NotImplementedError(f"Unknown protocol {self.protocol}")
         self.client = c
-        self.poll_thread.start()
 
         Domoticz.Log("onStart called")
 
@@ -146,6 +136,7 @@ class PyAirControl:
 
     def onHeartbeat(self):
         Domoticz.Log("onHeartbeat called")
+        self.onPollDevice()
 
 
 global _plugin
