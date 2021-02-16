@@ -71,7 +71,7 @@ class PyAirControl:
     def __init__(self):
         self.protocol = None
         self.device_address = None
-        self.client: pyairctrl.coap_client.HTTPAirClientBase
+        self.client: pyairctrl.coap_client.HTTPAirClientBase = None
 
     def checkDevices(self):
         for index, (_, name, type_, subtype, options) in enumerate(self.devices):
@@ -80,6 +80,8 @@ class PyAirControl:
                 Domoticz.Device(Name=name, Unit=index + 1, Type=type_, Subtype=subtype, Options=options).Create()
 
     def onPollDevice(self):
+        if self.client is None:
+            return
         status = self.client.get_status()
         for index, (_, name, type_, subtype, options) in enumerate(self.devices):
             if type_ == 0:  # Not yet enabled
