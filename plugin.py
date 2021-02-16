@@ -25,7 +25,7 @@
             <options>
                 <option label="HTTP" value="http"/>
                 <option label="CoAP" value="coap"/>
-                <option label="¨Plain CoAP" value="plain_coap"/>
+                <option label="Plain CoAP" value="plain_coap"/>
             </options>
         </param>
     </params>
@@ -100,6 +100,8 @@ class PyAirControl:
         self.device_address = Parameters["Address"].replace(" ", "")
         self.checkDevices()
 
+        Domoticz.Log("Starting pyaircontrol on " + self.protocol + '/' + self.device_address)
+
         if self.protocol == 'http':
             c = pyairctrl.airctrl.HTTPAirClient(self.device_address)
             c.load_key()
@@ -115,8 +117,6 @@ class PyAirControl:
 
     def onStop(self):
         Domoticz.Log("onStop called")
-        self.poll_thread_stop.set()
-        self.poll_thread.join()
 
     def onConnect(self, Connection, Status, Description):
         Domoticz.Log("onConnect called")
