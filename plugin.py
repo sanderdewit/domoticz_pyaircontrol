@@ -89,7 +89,8 @@ class PyAirControl:
             try:
                 value = status[_]
                 if type_ == 244:
-                    Devices[index + 1].Update(nValue=int(value), sValue={'1': 'on', '0': 'off'}.get(value, 'off'))
+                    #Devices[index + 1].Update(nValue=int(value), sValue={'1': 'on', '0': 'off'}.get(value, 'off'))
+                    Devices[index + 1].Update(nValue=int(value), sValue=str(svalue))
                 else:
                     Devices[index + 1].Update(nValue=1, sValue=str(value))
             except KeyError:
