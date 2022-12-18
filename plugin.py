@@ -87,9 +87,9 @@ class PyAirControl:
             if type_ == 0:  # Not yet enabled
                 continue
             try:
-                value = status[name]
+                value = status[_]
                 if type_ == 244:
-                    Devices[index + 1].Update(nValue=value, sValue={'1': 'on', '0': 'off'}.get(value, 'off'))
+                    Devices[index + 1].Update(nValue=int(value), sValue={'1': 'on', '0': 'off'}.get(value, 'off'))
                 else:
                     Devices[index + 1].Update(nValue=1, sValue=str(value))
             except KeyError:
